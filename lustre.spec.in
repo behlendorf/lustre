@@ -19,6 +19,8 @@
 
 %{!?lustre_name: %define lustre_name lustre}
 %{!?build_lustre_tests: %define build_lustre_tests 1}
+%{!?_with_ldiskfs: %{!?_without_ldiskfs: %define _with_ldiskfs --with-ldiskfs}}
+%{!?_with_zfs: %{!?_without_zfs: %define _without_zfs --without-zfs}}
 
 # in order to get kernel symset and/or kernel module dependencies into
 # the RPM, in order to support weak-modules, the internal dependency gen-
@@ -64,6 +66,9 @@ Obsoletes: lustre-lite, lustre-lite-utils, lustre-ldap nfs-utils-lustre
 Provides: lustre-lite = %{version}, lustre-lite-utils = %{version}
 Requires: %{name}-modules = %{version}
 # GSS requires this: BuildRequires: pkgconfig, libgssapi-devel >= 0.10
+%if %{with zfs} && ! %{is_client}
+BuildRequires: spl-modules-devel zfs-modules-devel
+%endif
 
 %description
 Userspace tools and files for the Lustre file system.
@@ -73,11 +78,13 @@ Summary: Kernel Lustre modules for Linux %{kversion}
 # for SLES11, we need nothing here
 # for SLES10, we need (where %{flavor} is, i.e. smp):
 %if %sles10
+BuildRequires: kernel-devel
 Requires: kernel-%{flavor}
 %else
 %if %{_vendor}=="redhat" || %{_vendor}=="fedora"
 # for RHEL we need to require the specific kernel still since weak-modules
 # support on RH is, well, weak, to be punny about it
+BuildRequires: kernel-devel
 Requires: kernel = %{krequires}
 %endif
 %endif
@@ -189,6 +196,8 @@ fi
 %define eval_configure %(echo '%configure' | sed -e 's#\./configure#eval ./configure#')
 
 %eval_configure \
+	%{?_with_ldiskfs} %{?_without_ldiskfs} \
+	%{?_with_zfs} %{?_without_zfs} \
 	%{?kdir: --with-linux=%kdir} %{?kobjdir: --with-linux-obj=%kobjdir} \
 	$CONFIGURE_ARGS
 make -j $RPM_BUILD_NCPUS -s
