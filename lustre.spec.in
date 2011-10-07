@@ -18,7 +18,6 @@
 %define fullrelease %{myrelease}%{buildid}
 
 %{!?lustre_name: %define lustre_name lustre}
-%{!?build_lustre_tests: %define build_lustre_tests 1}
 %{!?_with_ldiskfs: %{!?_without_ldiskfs: %define _with_ldiskfs --with-ldiskfs}}
 %{!?_with_zfs: %{!?_without_zfs: %define _without_zfs --without-zfs}}
 
@@ -176,7 +175,7 @@ cd $RPM_BUILD_DIR/lustre-%{version}
 # build failures
 %define optflags -g -O2 -Werror
 CONFIGURE_ARGS="%{?configure_args} --with-release=%release"
-%if %{build_lustre_tests}
+%if 0%{?build_lustre_tests}
 CONFIGURE_ARGS="$CONFIGURE_ARGS --enable-tests --enable-liblustre-tests"
 %else
 CONFIGURE_ARGS="$CONFIGURE_ARGS --disable-tests --disable-liblustre-tests"
@@ -210,12 +209,14 @@ rm -f $RPM_BUILD_ROOT%{_libdir}/libsysio.a
 rm -rf $RPM_BUILD_ROOT/lib/modules/%{kversion}/updates/kernel/fs/lustre-ldiskfs
 
 # hack to include the llog_test module in lustre-tests
+%if 0%{?build_lustre_tests}
 llog_base=$RPM_BUILD_DIR/lustre-%{version}/lustre/obdclass/llog_test
 if [ -e ${llog_base}.ko ]; then
   cp ${llog_base}.ko $RPM_BUILD_ROOT/lib/modules/%{kversion}/updates/kernel/fs/lustre
 elif [ -e ${llog_base}.o ]; then
   cp ${llog_base}.o $RPM_BUILD_ROOT/lib/modules/%{kversion}/updates/kernel/fs/lustre
 fi
+%endif
 
 # Create the pristine source directory.
 cd $RPM_BUILD_DIR/lustre-%{version}
@@ -273,7 +274,7 @@ if [ -f $RPM_BUILD_DIR/lustre-%{version}/lustre/include/linux/lustre_types.h ] ;
   echo '%attr(-, root, root) /usr/include/linux/lustre_types.h' >>lustre.files
 fi
 
-%if %{build_lustre_tests}
+%if 0%{?build_lustre_tests}
 echo '%attr(-, root, root) %{_libdir}/lustre/tests/*' >lustre-tests.files
 echo '%attr(-, root, root) /lib/modules/%{kversion}/updates/kernel/fs/lustre/llog_test.*' >>lustre-tests.files
 modules_excludes="|llog_test"
@@ -301,7 +302,7 @@ popd >/dev/null
 # %files deps-sles
 # %files deps-rhel
 
-%if %{build_lustre_tests}
+%if 0%{?build_lustre_tests}
 %files tests -f lustre-tests.files
 %endif
 
@@ -364,7 +365,7 @@ if [ -x /sbin/weak-modules ]; then
 fi
 rm /var/run/%{name}-modules
 
-%if %{build_lustre_tests}
+%if 0%{?build_lustre_tests}
 %post tests
 if [ -f /boot/System.map-%{kversion} ]; then
 	depmod -ae -F /boot/System.map-%{kversion} %{kversion} || exit 0
