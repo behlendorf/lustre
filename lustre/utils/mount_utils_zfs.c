@@ -52,6 +52,7 @@
 #define LDD_MGSNODE_PROP        "lustre:mgsnode"
 #define LDD_FAILNODE_PROP       "lustre:failnode"
 #define LDD_FAILMODE_PROP       "lustre:failmode"
+#define LDD_UPCALL_PROP         "lustre:upcall"
 
 static libzfs_handle_t *g_zfs;
 
@@ -155,6 +156,11 @@ int zfs_write_ldd(struct mkfs_opts *mop)
                 goto out_close;
 
         ret = zfs_set_prop_param(zhp, ldd, PARAM_FAILMODE, LDD_FAILMODE_PROP);
+        if (ret)
+                goto out_close;
+
+        ret = zfs_set_prop_param(zhp, ldd, PARAM_MDT PARAM_UPCALL,
+                                 LDD_UPCALL_PROP);
         if (ret)
                 goto out_close;
 
@@ -279,6 +285,11 @@ int zfs_read_ldd(char *ds,  struct lustre_disk_data *ldd)
                 goto out_close;
 
         ret = zfs_get_prop_param(zhp, ldd, PARAM_FAILMODE, LDD_FAILMODE_PROP);
+        if (ret && (ret != ENOENT))
+                goto out_close;
+
+        ret = zfs_get_prop_param(zhp, ldd, PARAM_MDT PARAM_UPCALL,
+                                 LDD_UPCALL_PROP);
         if (ret && (ret != ENOENT))
                 goto out_close;
 
