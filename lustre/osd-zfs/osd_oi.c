@@ -488,7 +488,7 @@ int osd_fid_lookup(const struct lu_env *env, struct osd_device *dev,
 	}
 
 	if (rc == 0)
-		dmu_prefetch(dev->od_os, *oid, 0, 0);
+		osd_dmu_prefetch(dev->od_os, *oid);
 
 	RETURN(rc);
 }

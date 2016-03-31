@@ -1518,7 +1518,7 @@ static void osd_zfs_otable_prefetch(const struct lu_env *env,
 		/* dmu_prefetch() was exported in 0.6.2, if you use with
 		 * an older release, just comment it out - this is an
 		 * optimization */
-		dmu_prefetch(dev->od_os, it->mit_prefetched_dnode, 0, 0);
+		osd_dmu_prefetch(dev->od_os, it->mit_prefetched_dnode);
 
 		it->mit_prefetched++;
 	}

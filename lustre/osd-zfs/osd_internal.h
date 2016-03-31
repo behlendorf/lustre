@@ -593,4 +593,16 @@ osd_zio_buf_free(void *buf, size_t size)
 #define	osd_zio_buf_free(buf, size)	zio_buf_free(buf, size)
 #endif
 
+#ifdef HAVE_DMU_PREFETCH_6ARG
+static inline void osd_dmu_prefetch(objset_t *os, uint64_t object)
+{
+	dmu_prefetch(os, object, 0, 0, 0, ZIO_PRIORITY_ASYNC_READ);
+}
+#else
+static inline void osd_dmu_prefetch(objset_t *os, uint64_t object)
+{
+	dmu_prefetch(os, object, 0, 0);
+}
+#endif
+
 #endif /* _OSD_INTERNAL_H */
