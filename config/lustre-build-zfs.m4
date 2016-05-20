@@ -450,6 +450,27 @@ your distribution.
 			AC_DEFINE(HAVE_SPA_MAXBLOCKSIZE, 1,
 				[Have spa_maxblocksize in ZFS])
 		])
+		LB_CHECK_COMPILE([if zfs defines dmu_object_alloc_dnsize],
+		dmu_object_alloc_dnsize, [
+			#include <sys/dmu.h>
+			#include <sys/dnode.h>
+		],[
+			objset_t *os = NULL;
+			dmu_object_type_t objtype = DMU_OT_NONE;
+			int blocksize = 0;
+			dmu_object_type_t bonustype = DMU_OT_SA;
+			int dnodesize = DNODE_MIN_SIZE;
+			dmu_tx_t *tx = NULL;
+			uint64_t id;
+
+			id = dmu_object_alloc_dnsize(os, objtype, blocksize,
+						     bonustype,
+						     DN_BONUS_SIZE(dnodesize),
+						     dnodesize, tx);
+		],[
+			AC_DEFINE(HAVE_DMU_OBJECT_ALLOC_DNSIZE, 1,
+				[Have dmu_object_alloc_dnsize in ZFS])
+		])
 		LB_CHECK_COMPILE([if ZFS has 'dmu_prefetch' with 6 args],
 		dmu_prefetch, [
 			#include <sys/dmu.h>
