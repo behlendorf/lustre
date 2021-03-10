@@ -290,11 +290,16 @@ static int osd_bufs_put(const struct lu_env *env, struct dt_object *dt,
 					lnb[i + j].lnb_page = NULL;
 				dmu_return_arcbuf(lnb[i].lnb_data);
 				atomic_dec(&osd->od_zerocopy_loan);
+			} else {
+				__free_page(lnb[i].lnb_page);
 			}
 		}
 		lnb[i].lnb_page = NULL;
 		lnb[i].lnb_data = NULL;
 	}
+
+	/* XXX - free in the direct case */
+	OBD_FREE_PTR_ARRAY_LARGE(uio->uio_dio.pages, PTLRPC_MAX_BRW_PAGES);
 
 	return 0;
 }
@@ -328,9 +333,10 @@ static inline struct page *kmem_to_page(void *addr)
  * \retval		0 for success
  * \retval		negative error number of failure
  */
-static int osd_bufs_get_read(const struct lu_env *env, struct osd_object *obj,
-			     loff_t off, ssize_t len, struct niobuf_local *lnb,
-			     int maxlnb)
+static int osd_bufs_get_read_buffered(const struct lu_env *env,
+				      struct osd_object *obj, loff_t off,
+				      ssize_t len, struct niobuf_local *lnb,
+				      int maxlnb)
 {
 	struct osd_device *osd = osd_obj2dev(obj);
 	int rc, i, numbufs, npages = 0, drop_cache = 0;
@@ -339,7 +345,6 @@ static int osd_bufs_get_read(const struct lu_env *env, struct osd_object *obj,
 	s64 delta_ms;
 
 	ENTRY;
-	record_start_io(osd, READ, 0);
 
 	if (obj->oo_attr.la_size >= osd->od_readcache_max_filesize)
 		drop_cache = 1;
@@ -422,10 +427,6 @@ static int osd_bufs_get_read(const struct lu_env *env, struct osd_object *obj,
 		dmu_buf_rele_array(dbp, numbufs, osd_0copy_tag);
 	}
 
-	delta_ms = gethrtime() - start;
-	do_div(delta_ms, NSEC_PER_MSEC);
-	record_end_io(osd, READ, delta_ms, npages * PAGE_SIZE, npages);
-
 	RETURN(npages);
 
 err:
@@ -434,6 +435,84 @@ err:
 		dmu_buf_rele_array(dbp, numbufs, osd_0copy_tag);
 	osd_bufs_put(env, &obj->oo_dt, lnb - npages, npages);
 	RETURN(rc);
+}
+
+static int osd_bufs_get_read_direct(const struct lu_env *env,
+				    struct osd_object *obj, loff_t off,
+				    ssize_t len, struct niobuf_local *lnb,
+				    int maxlnb)
+{
+	struct osd_device *osd = osd_obj2dev(obj);
+	size_t npages;
+
+	/* XXX - should go in the thread info */
+	zfs_uio_t uio;
+
+	ENTRY;
+
+	/* XXX - we should be able to use the same ldiskfs function
+	 * here if it were available to us in a common source.
+	 */
+	rc = osd_map_remote_to_local(off, len, &npages, lnb, maxlnb);
+	if (rc)
+		RETURN(rc);
+
+	zfs_uio_iovec_init(&uio, NULL, 0, off, UIO_SYSSPACE, len, 0);
+	uio->uio_dio.npages = npages;
+	uio->uio_extflg |= UIO_DIRECT;
+
+	OBD_ALLOC_PTR_ARRAY_LARGE(uio->uio_dio.pages, PTLRPC_MAX_BRW_PAGES);
+	if (uio->uio_dio.pages)
+		RETURN(-ENOMEM);
+
+	/* this could also try less hard for DT_BUFS_TYPE_READAHEAD pages */
+	gfp_mask = rw & DT_BUFS_TYPE_LOCAL ? (GFP_NOFS | __GFP_HIGHMEM) :
+					      GFP_HIGHUSER;
+	for (i = 0; i < npages; i++, lnb++) {
+		uio->uio_dio.pages[i] = alloc_page(gfp_mask);
+		if (!page) {
+			osd_bufs_put(env, &obj->oo_dt, lnb - i, i);
+			RETURN(-ENOMEM);
+		}
+
+		lnb->lnb_page = uio->uio_dio.pages[i];
+	}
+
+
+	RETURN(npages);
+}
+
+static int osd_bufs_get_read(const struct lu_env *env, struct osd_object *obj,
+			     loff_t off, ssize_t len, struct niobuf_local *lnb,
+			     int maxlnb)
+{
+	struct osd_device *osd = osd_obj2dev(obj);
+	hrtime_t start = gethrtime();
+	s64 delta_ms;
+	int npages;
+	ENTRY;
+
+	record_start_io(osd, READ, 0);
+
+	if (osd_dmu_direct_flags(osd, 0) & DMU_DIRECTIO &&
+	    IO_PAGE_ALIGNED(off, len)) {
+		npages = osd_bufs_get_read_direct(env, obj, off, len, lnb,
+						  maxlnb);
+	} else {
+		npages = osd_bufs_get_read_buffered(env, obj, off, len, lnb,
+						    maxlnb);
+	}
+
+	if (npages < 0) {
+		record_end_io(osd, READ, 0, 0, 0);
+		RETURN(npages);
+	}
+
+	delta_ms = gethrtime() - start;
+	do_div(delta_ms, NSEC_PER_MSEC);
+	record_end_io(osd, READ, delta_ms, npages * PAGE_SIZE, npages);
+
+	RETURN(npages);
 }
 
 static inline arc_buf_t *osd_request_arcbuf(dnode_t *dn, size_t bs)

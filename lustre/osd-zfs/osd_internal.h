@@ -1067,18 +1067,17 @@ static inline void osd_tx_hold_write(dmu_tx_t *tx, uint64_t oid,
 	dmu_tx_hold_write(tx, oid, off, len);
 }
 
-#if defined(HAVE_DMU_DIRECT)
 static inline uint32_t osd_dmu_direct_flags(struct osd_device *osd,
 					    uint32_t flags)
 {
+#if defined(HAVE_DMU_DIRECT)
 	if (osd->od_direct == ZFS_DIRECT_ALWAYS)
 		flags |= DMU_DIRECTIO;
 	else if (osd->od_direct == ZFS_DIRECT_DISABLED)
 		flags &= ~DMU_DIRECTIO;
-
+#endif
 	return flags;
 }
-#endif
 
 static inline void osd_dmu_write(struct osd_device *osd, dnode_t *dn,
 				 uint64_t offset, uint64_t size,
